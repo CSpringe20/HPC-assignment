@@ -103,12 +103,12 @@ The actual update is carried out with multithreading using OpenMP:
 #pragma omp parallel for schedule(static)
 ```
 which tells the compiler to split the following for loop evenly and deterministically
-between threads. Since we are updating a grid of points we need to iterate throough
+between threads. Since we are updating a grid of points we need to iterate through
 2 dimensions, so the update consists of two loops, the one that gets parallelized
 is only the first one, which was set to be the row division since patches are 
 stored as row-major in memory. There could have been potential to parallelize
 both loops with *collapse* but it was not required because of this nice storing
-property and would have just slowed down computations.
+property.
 
 ### Finalization
 
@@ -167,7 +167,7 @@ Running the computations on small patches would produce misleading results since
 L3 caches would store most of the data, hence in order to obtain faithful results,
 a bigger grid needs to be set. 
 For the following results a grid of 100k x 50k points was used, which corresponds
-to about 500GB of memory.
+to 40GB of memory, times the 2 planes makes it 80GB.
 
 ### Optimal threads-per-node ratio
 
@@ -211,9 +211,7 @@ to fill a node of 128 cores we used 16 processes per node.
 
 From the following figure we can appreciate the strong scaling results:
 
-|         |         |
-|---------|---------|
-| ![](images/strong_scaling_speedup.png) | ![](images/strong_scaling_efficiency.png) |
+![](images/strong_scaling.png)
 
 As we can see, ideal scaling was achieved, even for the worst case, which
 we discussed before as being the most important one since it dictates the actual
