@@ -15,7 +15,7 @@ module load openMPI/5.0.5
 
 mpicc -fopenmp -Iinclude src/stencil_template_parallel.c -o stencil
 
-# Environment variables for OpenMP
+# OpenMP
 export OMP_PROC_BIND=spread
 export OMP_PLACES=cores
 
@@ -23,10 +23,8 @@ RUN=./stencil
 ARGS="-x 100000 -y 10000 -e 4000 -n 100 -o 0"
 CSV_FILE="csv/openmp_scaling.csv"
 
-# Write CSV header
 echo "NODES,MPI_TASKS,OMP_THREADS,GRID_X,GRID_Y,MAX_TOTAL,AVG_TOTAL,MAX_COMP,AVG_COMP,MAX_COMM,AVG_COMM" > $CSV_FILE
 
-# Loop over thread counts
 for T in 1 2 4 8 16 32 64 128; do
   export OMP_NUM_THREADS=$T
   for r in 1 2 3; do

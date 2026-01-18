@@ -208,7 +208,7 @@ int main(int argc, char **argv)
     int n_ranks = 0;
     MPI_Comm_size(myCOMM_WORLD, &n_ranks);
 
-    /* determine number of nodes: try SLURM_NNODES env var, fallback to 1 */
+    // determine number of nodes
     int n_nodes = 1;
     char *env_nnodes = getenv("SLURM_NNODES");
     if (env_nnodes != NULL) {
@@ -216,7 +216,7 @@ int main(int argc, char **argv)
       if (n_nodes <= 0) n_nodes = 1;
     }
 
-    /* OpenMP threads */
+    // OpenMP threads
     int n_threads = 1;
     #ifdef _OPENMP
         n_threads = omp_get_max_threads();
@@ -226,7 +226,8 @@ int main(int argc, char **argv)
     double avg_comm = sum_comm / (double)n_ranks;
     double avg_total = sum_total / (double)n_ranks;
 
-    /* CSV: NODES,MPI_TASKS,OMP_THREADS,GRID_X,GRID_Y,MAX_TOTAL,AVG_TOTAL,MAX_COMP,AVG_COMP,MAX_COMM,AVG_COMM */
+    // CSV: NODES,MPI_TASKS,OMP_THREADS,GRID_X,GRID_Y,MAX_TOTAL,
+    //      AVG_TOTAL,MAX_COMP,AVG_COMP,MAX_COMM,AVG_COMM
     printf("%d,%d,%d,%d,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
           n_nodes, n_ranks, n_threads,
           planes[!current].size[_x_], planes[!current].size[_y_],

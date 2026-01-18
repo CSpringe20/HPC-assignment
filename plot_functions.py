@@ -174,7 +174,7 @@ def plot_weak_scaling(save_path="images/weak_scaling.png"):
     base_max_total = df.loc[df["TOTAL_CORES"] == min_cores, "MAX_TOTAL"].mean()
     base_max_comp  = df.loc[df["TOTAL_CORES"] == min_cores, "MAX_COMP"].mean()
 
-    # Weak efficiency
+    # Efficiency
     df["EFF_TOTAL"] = base_avg_total / df["AVG_TOTAL"]
     df["EFF_COMP"]  = base_avg_comp  / df["AVG_COMP"]
     df["WORST_EFF_TOTAL"] = base_max_total / df["MAX_TOTAL"]
