@@ -147,9 +147,9 @@ where mpicc is the MPI C compiler wrapper, and -fopenmp enables OpenMP support.
 In order to quantify performance, we are going to use *speedup* and *efficiency*.
 
 Speedup is defined as:
-$$
-S(p) = \frac{T_1}{T_p}
-$$
+
+  - S(p) = T<sub>1</sub> / T<sub>p</sub>
+
 where:
 
 - $T_1$ is the execution time using 1 full node
@@ -158,9 +158,9 @@ where:
 The ideal speedup is linear scaling with slope 1.
 
 Efficiency measures how effectively the additional resources are used:
-$$
-E(p) = \frac{S(p)}{p} = \frac{T_1}{pT_p}
-$$
+
+  - E(p) = S(p) / p = T<sub>1</sub> / (p T<sub>p</sub>)
+
 An efficiency of 1 (or 100%) corresponds to perfect utilization of all cores.
 
 Running the computations on small patches would produce misleading results since
