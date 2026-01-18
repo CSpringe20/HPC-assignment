@@ -8,20 +8,20 @@
 #SBATCH --partition=EPYC
 #SBATCH -A dssc
 #SBATCH --exclusive
-#SBATCH --output=openmp-%j.out
-#SBATCH --error=openmp-%j.err
+#SBATCH --output=logs/openmp-%j.out
+#SBATCH --error=logs/openmp-%j.err
 
 module load openMPI/5.0.5
 
-#mpicc -fopenmp -Iinclude src/stencil_template_parallel.c -o stencil
+mpicc -fopenmp -Iinclude src/stencil_template_parallel.c -o stencil
 
 # Environment variables for OpenMP
-export OMP_PROC_BIND=close
+export OMP_PROC_BIND=spread
 export OMP_PLACES=cores
 
 RUN=./stencil
-ARGS="-x 20000 -y 20000 -e 400 -n 100"
-CSV_FILE="csv/timing_summary.csv"
+ARGS="-x 100000 -y 10000 -e 4000 -n 100 -o 0"
+CSV_FILE="csv/openmp_scaling.csv"
 
 # Write CSV header
 echo "NODES,MPI_TASKS,OMP_THREADS,GRID_X,GRID_Y,MAX_TOTAL,AVG_TOTAL,MAX_COMP,AVG_COMP,MAX_COMM,AVG_COMM" > $CSV_FILE

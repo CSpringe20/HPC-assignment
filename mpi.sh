@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=stencil_scaling
-#SBATCH --time=0:20:00
+#SBATCH --time=02:00:00
 #SBATCH --nodes=4                # Always reserve 4 nodes
 #SBATCH --ntasks-per-node=16     # 16 MPI ranks per node (128 ranks total)
 #SBATCH --cpus-per-task=8        # 8 OpenMP threads per rank
@@ -8,8 +8,8 @@
 #SBATCH --partition=EPYC
 #SBATCH -A dssc
 #SBATCH --exclusive
-#SBATCH --output=mpi-%j.out
-#SBATCH --error=mpi-%j.err
+#SBATCH --output=logs/mpi-%j.out
+#SBATCH --error=logs/mpi-%j.err
 
 module load openMPI/5.0.5
 
@@ -21,9 +21,9 @@ export OMP_PLACES=cores
 export OMP_NUM_THREADS=8
 
 RUN=./stencil
-BASE_X=30000
-BASE_Y=30000
-ARGS_COMMON="-e 400 -n 100 -o 0"
+BASE_X=100000
+BASE_Y=50000
+ARGS_COMMON="-e 4000 -n 100 -o 0"
 
 STRONG_CSV="csv/strong_scaling.csv"
 WEAK_CSV="csv/weak_scaling.csv"

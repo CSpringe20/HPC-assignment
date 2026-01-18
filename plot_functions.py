@@ -1,44 +1,76 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 
-
+# -----------------------------
+# Load data
+# -----------------------------
 strong = pd.read_csv("csv/strong_scaling.csv")
 weak = pd.read_csv("csv/weak_scaling.csv")
-openmp = pd.read_csv("csv/timing_summary.csv")
+openmp = pd.read_csv("csv/openmp_scaling.csv")
 
-for df in [strong, weak]:
+for df in (strong, weak):
     df["TOTAL_CORES"] = df["MPI_TASKS"] * df["OMP_THREADS"]
-    
-colors = {"TOTAL": "lightgreen", "COMP": "tab:red"}
 
+# -----------------------------
+# Plot styling (your rules)
+#   - AVG: green
+#   - WORST: red
+#   - TOTAL: solid line
+#   - COMP: dotted line
+# -----------------------------
+STYLES = {
+    ("AVG", "TOTAL"): {"color": "tab:green", "linestyle": "-", "marker": "o"},
+    ("AVG", "COMP"):  {"color": "tab:green", "linestyle": ":", "marker": "s"},
+    ("WORST", "TOTAL"): {"color": "tab:red", "linestyle": "-", "marker": "o"},
+    ("WORST", "COMP"):  {"color": "tab:red", "linestyle": ":", "marker": "s"},
+}
+
+
+def _agg_with_std(df: pd.DataFrame, group_col: str, cols: list[str]) -> tuple[pd.DataFrame, pd.DataFrame]:
+    grouped = df.groupby(group_col)
+    mean_df = grouped[cols].mean()
+    std_df = grouped[cols].std()
+    return mean_df, std_df
+
+
+def _plot_band(ax, x, y_mean, y_std, label: str, style: dict, band_alpha: float = 0.18):
+    ax.plot(x, y_mean, label=label, **style)
+    # If only one repeat, std can be NaN; avoid fill_between issues
+    if y_std is not None and not np.all(np.isnan(y_std)):
+        ax.fill_between(
+            x,
+            y_mean - y_std,
+            y_mean + y_std,
+            color=style["color"],
+            alpha=band_alpha,
+        )
+
+
+# -----------------------------
+# OpenMP scaling (2 subplots)
+#   - Speedup line: blue
+#   - Efficiency line: orange
+# -----------------------------
 def plot_openmp_scaling(save_path="images/openmp_scaling.png"):
-    df = openmp
-    avg_df = df.groupby("OMP_THREADS", as_index=False).mean()
+    df = openmp.copy()
+    avg_df = df.groupby("OMP_THREADS", as_index=False).mean(numeric_only=True)
 
-    threads = avg_df["OMP_THREADS"]
+    threads = avg_df["OMP_THREADS"].astype(int)
     avg_comp = avg_df["AVG_COMP"]
 
-    # Compute speedup
     t1 = avg_comp.iloc[0]
     speedup = t1 / avg_comp
-
-    # Compute efficiency = speedup / number_of_threads
     efficiency = speedup / threads
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
-    # --- Left Plot: Speedup ---
-    axes[0].plot(threads, speedup, marker="o", label="Speedup")
-    axes[0].plot(
-        threads,
-        threads / threads.iloc[0],
-        linestyle="--",
-        color="gray",
-        label="Ideal Speedup",
-    )
+    # Speedup (BLUE)
+    axes[0].plot(threads, speedup, marker="o", color="tab:blue", label="Speedup")
+    axes[0].plot(threads, threads / threads.iloc[0], linestyle="--", color="gray", label="Ideal Speedup")
     axes[0].set_xlabel("Number of Threads", fontsize=12)
     axes[0].set_ylabel("Speedup (T1 / Tn)", fontsize=12)
-    axes[0].set_title("Speedup vs Threads", fontsize=14)
+    axes[0].set_title("OpenMP Speedup vs Threads", fontsize=14)
     axes[0].set_xscale("log", base=2)
     axes[0].set_yscale("log", base=2)
     axes[0].set_xticks(threads)
@@ -46,166 +78,168 @@ def plot_openmp_scaling(save_path="images/openmp_scaling.png"):
     axes[0].grid(True, linestyle="--", alpha=0.6)
     axes[0].legend()
 
-    # --- Right Plot: Efficiency ---
+    # Efficiency (ORANGE)
     axes[1].plot(threads, efficiency, marker="o", color="tab:orange", label="Efficiency")
     axes[1].axhline(1.0, linestyle="--", color="gray", linewidth=1, label="Ideal Efficiency")
     axes[1].set_xlabel("Number of Threads", fontsize=12)
     axes[1].set_ylabel("Efficiency (Speedup / Threads)", fontsize=12)
-    axes[1].set_title("Parallel Efficiency vs Threads", fontsize=14)
+    axes[1].set_title("OpenMP Efficiency vs Threads", fontsize=14)
     axes[1].set_xscale("log", base=2)
     axes[1].set_xticks(threads)
     axes[1].set_xticklabels(threads)
-    axes[1].set_ylim(0, 1.1)  # Efficiency max is 1
+    axes[1].set_ylim(0, 1.1)
     axes[1].grid(True, linestyle="--", alpha=0.6)
     axes[1].legend()
 
     plt.tight_layout()
     plt.savefig(save_path, dpi=300)
     plt.show()
-
     print(f"Plot saved to {save_path}")
 
 
-def plot_strong_scaling(save_path="images/"):
-    strong_repeats = strong.copy()
+# -----------------------------
+# Strong scaling (speedup + efficiency, separate figures)
+# -----------------------------
+def plot_strong_scaling(save_dir="images/"):
+    df = strong.copy()
+    min_cores = df["TOTAL_CORES"].min()
 
-    # Baselines
-    baseline_total = strong_repeats[strong_repeats["TOTAL_CORES"] == strong_repeats["TOTAL_CORES"].min()]["AVG_TOTAL"].mean()
-    baseline_comp  = strong_repeats[strong_repeats["TOTAL_CORES"] == strong_repeats["TOTAL_CORES"].min()]["AVG_COMP"].mean()
-    m_baseline_total = strong_repeats[strong_repeats["TOTAL_CORES"] == strong_repeats["TOTAL_CORES"].min()]["MAX_TOTAL"].mean()
-    m_baseline_comp  = strong_repeats[strong_repeats["TOTAL_CORES"] == strong_repeats["TOTAL_CORES"].min()]["MAX_COMP"].mean()
+    # Baselines at min cores (AVG and WORST baselines separately)
+    base_avg_total = df.loc[df["TOTAL_CORES"] == min_cores, "AVG_TOTAL"].mean()
+    base_avg_comp  = df.loc[df["TOTAL_CORES"] == min_cores, "AVG_COMP"].mean()
+    base_max_total = df.loc[df["TOTAL_CORES"] == min_cores, "MAX_TOTAL"].mean()
+    base_max_comp  = df.loc[df["TOTAL_CORES"] == min_cores, "MAX_COMP"].mean()
 
-    # Speedup
-    strong_repeats["SPEEDUP_TOTAL"] = baseline_total / strong_repeats["AVG_TOTAL"]
-    strong_repeats["SPEEDUP_COMP"]  = baseline_comp / strong_repeats["AVG_COMP"]
-    strong_repeats["MAX_SPEEDUP_TOTAL"] = m_baseline_total / strong_repeats["MAX_TOTAL"]
-    strong_repeats["MAX_SPEEDUP_COMP"]  = m_baseline_comp / strong_repeats["MAX_COMP"]
+    # Speedup (AVG and WORST)
+    df["SPEEDUP_TOTAL"] = base_avg_total / df["AVG_TOTAL"]
+    df["SPEEDUP_COMP"]  = base_avg_comp  / df["AVG_COMP"]
+    df["WORST_SPEEDUP_TOTAL"] = base_max_total / df["MAX_TOTAL"]
+    df["WORST_SPEEDUP_COMP"]  = base_max_comp  / df["MAX_COMP"]
 
-    # Efficiency
-    strong_repeats["EFF_TOTAL"] = strong_repeats["SPEEDUP_TOTAL"] / (strong_repeats["TOTAL_CORES"] / strong_repeats["TOTAL_CORES"].min())
-    strong_repeats["EFF_COMP"]  = strong_repeats["SPEEDUP_COMP"] / (strong_repeats["TOTAL_CORES"] / strong_repeats["TOTAL_CORES"].min())
-    strong_repeats["MAX_EFF_TOTAL"] = strong_repeats["MAX_SPEEDUP_TOTAL"] / (strong_repeats["TOTAL_CORES"] / strong_repeats["TOTAL_CORES"].min())
-    strong_repeats["MAX_EFF_COMP"]  = strong_repeats["MAX_SPEEDUP_COMP"] / (strong_repeats["TOTAL_CORES"] / strong_repeats["TOTAL_CORES"].min())
+    # Efficiency = speedup / (p/p0)
+    scale = df["TOTAL_CORES"] / min_cores
+    df["EFF_TOTAL"] = df["SPEEDUP_TOTAL"] / scale
+    df["EFF_COMP"]  = df["SPEEDUP_COMP"]  / scale
+    df["WORST_EFF_TOTAL"] = df["WORST_SPEEDUP_TOTAL"] / scale
+    df["WORST_EFF_COMP"]  = df["WORST_SPEEDUP_COMP"]  / scale
 
-    # Aggregate
-    strong_grouped = strong_repeats.groupby("TOTAL_CORES")
-    strong_mean = strong_grouped[["SPEEDUP_TOTAL", "SPEEDUP_COMP", "EFF_TOTAL", "EFF_COMP",
-                                "MAX_SPEEDUP_TOTAL", "MAX_SPEEDUP_COMP", "MAX_EFF_TOTAL", "MAX_EFF_COMP"]].mean()
-    strong_std  = strong_grouped[["SPEEDUP_TOTAL", "SPEEDUP_COMP", "EFF_TOTAL", "EFF_COMP",
-                                "MAX_SPEEDUP_TOTAL", "MAX_SPEEDUP_COMP", "MAX_EFF_TOTAL", "MAX_EFF_COMP"]].std()
+    cols = [
+        "SPEEDUP_TOTAL", "SPEEDUP_COMP", "WORST_SPEEDUP_TOTAL", "WORST_SPEEDUP_COMP",
+        "EFF_TOTAL", "EFF_COMP", "WORST_EFF_TOTAL", "WORST_EFF_COMP",
+    ]
+    mean_df, std_df = _agg_with_std(df, "TOTAL_CORES", cols)
+    x = mean_df.index
 
-    # --- Plot Strong Scaling Speedup ---
-    plt.figure(figsize=(8,6))
-    x = strong_mean.index
-    plt.plot(x, strong_mean["SPEEDUP_TOTAL"], 'o-', color=colors["TOTAL"], label="AVG Total Speedup")
-    plt.fill_between(x, strong_mean["SPEEDUP_TOTAL"] - strong_std["SPEEDUP_TOTAL"],
-                        strong_mean["SPEEDUP_TOTAL"] + strong_std["SPEEDUP_TOTAL"], color=colors["TOTAL"], alpha=0.2)
-    plt.plot(x, strong_mean["MAX_SPEEDUP_TOTAL"], 'o--', color=colors["TOTAL"], label="WORST Total Speedup")
-    plt.fill_between(x, strong_mean["MAX_SPEEDUP_TOTAL"] - strong_std["MAX_SPEEDUP_TOTAL"],
-                        strong_mean["MAX_SPEEDUP_TOTAL"] + strong_std["MAX_SPEEDUP_TOTAL"], color=colors["TOTAL"], alpha=0.2)
+    # --- Strong Scaling Speedup ---
+    fig, ax = plt.subplots(figsize=(8, 6))
 
-    plt.plot(x, strong_mean["SPEEDUP_COMP"], 's-', color=colors["COMP"], label="AVG Computation Speedup")
-    plt.fill_between(x, strong_mean["SPEEDUP_COMP"] - strong_std["SPEEDUP_COMP"],
-                        strong_mean["SPEEDUP_COMP"] + strong_std["SPEEDUP_COMP"], color=colors["COMP"], alpha=0.2)
-    plt.plot(x, strong_mean["MAX_SPEEDUP_COMP"], 's--', color=colors["COMP"], label="WORST Computation Speedup")
-    plt.fill_between(x, strong_mean["MAX_SPEEDUP_COMP"] - strong_std["MAX_SPEEDUP_COMP"],
-                        strong_mean["MAX_SPEEDUP_COMP"] + strong_std["MAX_SPEEDUP_COMP"], color=colors["COMP"], alpha=0.2)
+    _plot_band(ax, x, mean_df["SPEEDUP_TOTAL"], std_df["SPEEDUP_TOTAL"],
+               "AVG Total Speedup", STYLES[("AVG", "TOTAL")])
+    _plot_band(ax, x, mean_df["SPEEDUP_COMP"], std_df["SPEEDUP_COMP"],
+               "AVG Computation Speedup", STYLES[("AVG", "COMP")])
 
-    plt.plot(x, x / x.min(), 'k--', label="Ideal Speedup")
-    plt.xlabel("Total Cores")
-    plt.ylabel("Speedup")
-    plt.title("Strong Scaling Speedup")
-    plt.grid(True)
-    plt.legend()
+    _plot_band(ax, x, mean_df["WORST_SPEEDUP_TOTAL"], std_df["WORST_SPEEDUP_TOTAL"],
+               "WORST Total Speedup", STYLES[("WORST", "TOTAL")])
+    _plot_band(ax, x, mean_df["WORST_SPEEDUP_COMP"], std_df["WORST_SPEEDUP_COMP"],
+               "WORST Computation Speedup", STYLES[("WORST", "COMP")])
+
+    ax.plot(x, x / x.min(), "k--", label="Ideal Speedup")
+    ax.set_xlabel("Total Cores")
+    ax.set_ylabel("Speedup")
+    ax.set_title("Strong Scaling Speedup")
+    ax.grid(True, linestyle="--", alpha=0.6)
+    ax.legend()
     plt.tight_layout()
-    plt.savefig(save_path+"strong_scaling_speedup.png", dpi=300)
+
+    out_speedup = f"{save_dir}strong_scaling_speedup.png"
+    plt.savefig(out_speedup, dpi=300)
     plt.show()
+    print(f"Plot saved to {out_speedup}")
 
-    print(f"Plot saved to {save_path}strong_scaling_speedup.png")
+    # --- Strong Scaling Efficiency ---
+    fig, ax = plt.subplots(figsize=(8, 6))
 
+    _plot_band(ax, x, mean_df["EFF_TOTAL"], std_df["EFF_TOTAL"],
+               "AVG Total Efficiency", STYLES[("AVG", "TOTAL")])
+    _plot_band(ax, x, mean_df["EFF_COMP"], std_df["EFF_COMP"],
+               "AVG Computation Efficiency", STYLES[("AVG", "COMP")])
 
-    # --- Plot Strong Scaling Efficiency ---
-    plt.figure(figsize=(8,6))
-    plt.plot(x, strong_mean["EFF_TOTAL"], 'o-', color=colors["TOTAL"], label="AVG Total Efficiency")
-    plt.fill_between(x, strong_mean["EFF_TOTAL"] - strong_std["EFF_TOTAL"],
-                        strong_mean["EFF_TOTAL"] + strong_std["EFF_TOTAL"], color=colors["TOTAL"], alpha=0.2)
-    plt.plot(x, strong_mean["MAX_EFF_TOTAL"], 'o--', color=colors["TOTAL"], label="WORST Total Efficiency")
-    plt.fill_between(x, strong_mean["MAX_EFF_TOTAL"] - strong_std["MAX_EFF_TOTAL"],
-                        strong_mean["MAX_EFF_TOTAL"] + strong_std["MAX_EFF_TOTAL"], color=colors["TOTAL"], alpha=0.2)
+    _plot_band(ax, x, mean_df["WORST_EFF_TOTAL"], std_df["WORST_EFF_TOTAL"],
+               "WORST Total Efficiency", STYLES[("WORST", "TOTAL")])
+    _plot_band(ax, x, mean_df["WORST_EFF_COMP"], std_df["WORST_EFF_COMP"],
+               "WORST Computation Efficiency", STYLES[("WORST", "COMP")])
 
-    plt.plot(x, strong_mean["EFF_COMP"], 's-', color=colors["COMP"], label="AVG Computation Efficiency")
-    plt.fill_between(x, strong_mean["EFF_COMP"] - strong_std["EFF_COMP"],
-                        strong_mean["EFF_COMP"] + strong_std["EFF_COMP"], color=colors["COMP"], alpha=0.2)
-    plt.plot(x, strong_mean["MAX_EFF_COMP"], 's--', color=colors["COMP"], label="WORST Computation Efficiency")
-    plt.fill_between(x, strong_mean["MAX_EFF_COMP"] - strong_std["MAX_EFF_COMP"],
-                        strong_mean["MAX_EFF_COMP"] + strong_std["MAX_EFF_COMP"], color=colors["COMP"], alpha=0.2)
-
-    plt.plot(x, [1]*len(x), 'k--', label="Ideal Efficiency")
-    plt.xlabel("Total Cores")
-    plt.ylabel("Parallel Efficiency")
-    plt.title("Strong Scaling Efficiency")
-    plt.grid(True)
-    plt.legend()
+    ax.axhline(1.0, linestyle="--", color="gray", linewidth=1, label="Ideal Efficiency")
+    ax.set_xlabel("Total Cores")
+    ax.set_ylabel("Parallel Efficiency")
+    ax.set_title("Strong Scaling Efficiency")
+    ax.set_ylim(0.70, 1.10)
+    ax.set_yticks(np.arange(0.70, 1.11, 0.10))
+    ax.grid(True, linestyle="--", alpha=0.6)
+    ax.legend()
     plt.tight_layout()
-    plt.savefig(save_path+"strong_scaling_efficiency.png", dpi=300)
+
+    out_eff = f"{save_dir}strong_scaling_efficiency.png"
+    plt.savefig(out_eff, dpi=300)
     plt.show()
+    print(f"Plot saved to {out_eff}")
 
-    print(f"Plot saved to {save_path}strong_scaling_efficiency.png")
 
-def plot_weak_scaling(save_path="images/"):
-    weak_repeats = weak.copy()
+# -----------------------------
+# Weak scaling (ONLY efficiency, single plot)
+# -----------------------------
+def plot_weak_scaling(save_path="images/weak_scaling.png"):
+    df = weak.copy()
+    min_cores = df["TOTAL_CORES"].min()
 
-    # Baselines
-    baseline_weak_total = weak_repeats[weak_repeats["TOTAL_CORES"] == weak_repeats["TOTAL_CORES"].min()]["AVG_TOTAL"].mean()
-    baseline_weak_comp  = weak_repeats[weak_repeats["TOTAL_CORES"] == weak_repeats["TOTAL_CORES"].min()]["AVG_COMP"].mean()
+    # Baselines at min cores (AVG and WORST baselines separately)
+    base_avg_total = df.loc[df["TOTAL_CORES"] == min_cores, "AVG_TOTAL"].mean()
+    base_avg_comp  = df.loc[df["TOTAL_CORES"] == min_cores, "AVG_COMP"].mean()
+    base_max_total = df.loc[df["TOTAL_CORES"] == min_cores, "MAX_TOTAL"].mean()
+    base_max_comp  = df.loc[df["TOTAL_CORES"] == min_cores, "MAX_COMP"].mean()
 
-    # Efficiency
-    weak_repeats["EFF_TOTAL"] = baseline_weak_total / weak_repeats["AVG_TOTAL"]
-    weak_repeats["EFF_COMP"]  = baseline_weak_comp / weak_repeats["AVG_COMP"]
-    weak_repeats["MAX_EFF_TOTAL"] = baseline_weak_total / weak_repeats["MAX_TOTAL"]
-    weak_repeats["MAX_EFF_COMP"]  = baseline_weak_comp / weak_repeats["MAX_COMP"]
+    # Weak efficiency (standard) = T1/Tp
+    df["EFF_TOTAL"] = base_avg_total / df["AVG_TOTAL"]
+    df["EFF_COMP"]  = base_avg_comp  / df["AVG_COMP"]
+    df["WORST_EFF_TOTAL"] = base_max_total / df["MAX_TOTAL"]
+    df["WORST_EFF_COMP"]  = base_max_comp  / df["MAX_COMP"]
 
-    # Aggregate
-    weak_grouped = weak_repeats.groupby("TOTAL_CORES")
-    weak_mean = weak_grouped[["EFF_TOTAL", "EFF_COMP", "MAX_EFF_TOTAL", "MAX_EFF_COMP"]].mean()
-    weak_std  = weak_grouped[["EFF_TOTAL", "EFF_COMP", "MAX_EFF_TOTAL", "MAX_EFF_COMP"]].std()
+    cols = ["EFF_TOTAL", "EFF_COMP", "WORST_EFF_TOTAL", "WORST_EFF_COMP"]
+    mean_df, std_df = _agg_with_std(df, "TOTAL_CORES", cols)
+    x = mean_df.index
 
-    # Define colors
-    save_path = save_path + "weak_scaling.png"
+    fig, ax = plt.subplots(figsize=(8, 6))
 
-    # --- Plot Weak Scaling Efficiency ---
-    plt.figure(figsize=(8,6))
-    xw = weak_mean.index
-    plt.plot(xw, weak_mean["EFF_TOTAL"], 'o-', color=colors["TOTAL"], label="AVG Total Efficiency")
-    plt.fill_between(xw, weak_mean["EFF_TOTAL"] - weak_std["EFF_TOTAL"],
-                        weak_mean["EFF_TOTAL"] + weak_std["EFF_TOTAL"], color=colors["TOTAL"], alpha=0.2)
-    plt.plot(xw, weak_mean["MAX_EFF_TOTAL"], 'o--', color=colors["TOTAL"], label="WORST Total Efficiency")
-    plt.fill_between(xw, weak_mean["MAX_EFF_TOTAL"] - weak_std["MAX_EFF_TOTAL"],
-                        weak_mean["MAX_EFF_TOTAL"] + weak_std["MAX_EFF_TOTAL"], color=colors["TOTAL"], alpha=0.2)
+    _plot_band(ax, x, mean_df["EFF_TOTAL"], std_df["EFF_TOTAL"],
+               "AVG Total Efficiency", STYLES[("AVG", "TOTAL")])
+    _plot_band(ax, x, mean_df["EFF_COMP"], std_df["EFF_COMP"],
+               "AVG Computation Efficiency", STYLES[("AVG", "COMP")])
 
-    plt.plot(xw, weak_mean["EFF_COMP"], 's-', color=colors["COMP"], label="AVG Computation Efficiency")
-    plt.fill_between(xw, weak_mean["EFF_COMP"] - weak_std["EFF_COMP"],
-                        weak_mean["EFF_COMP"] + weak_std["EFF_COMP"], color=colors["COMP"], alpha=0.2)
-    plt.plot(xw, weak_mean["MAX_EFF_COMP"], 's--', color=colors["COMP"], label="WORST Computation Efficiency")
-    plt.fill_between(xw, weak_mean["MAX_EFF_COMP"] - weak_std["MAX_EFF_COMP"],
-                        weak_mean["MAX_EFF_COMP"] + weak_std["MAX_EFF_COMP"], color=colors["COMP"], alpha=0.2)
+    _plot_band(ax, x, mean_df["WORST_EFF_TOTAL"], std_df["WORST_EFF_TOTAL"],
+               "WORST Total Efficiency", STYLES[("WORST", "TOTAL")])
+    _plot_band(ax, x, mean_df["WORST_EFF_COMP"], std_df["WORST_EFF_COMP"],
+               "WORST Computation Efficiency", STYLES[("WORST", "COMP")])
 
-    plt.plot(xw, [1]*len(xw), 'k--', label="Ideal Efficiency")
-    plt.xlabel("Total Cores")
-    plt.ylabel("Parallel Efficiency")
-    plt.title("Weak Scaling Efficiency")
-    plt.grid(True)
-    plt.legend()
+    ax.axhline(1.0, linestyle="--", color="gray", linewidth=1, label="Ideal Efficiency")
+    ax.set_xlabel("Total Cores")
+    ax.set_ylabel("Parallel Efficiency (T1 / Tp)")
+    ax.set_title("Weak Scaling Efficiency")
+    ax.set_ylim(0.70, 1.10)
+    ax.set_yticks(np.arange(0.70, 1.11, 0.10))
+    ax.grid(True, linestyle="--", alpha=0.6)
+    ax.legend()
+
     plt.tight_layout()
     plt.savefig(save_path, dpi=300)
     plt.show()
-
     print(f"Plot saved to {save_path}")
+
 
 def main():
     plot_openmp_scaling()
     plot_strong_scaling()
     plot_weak_scaling()
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     main()

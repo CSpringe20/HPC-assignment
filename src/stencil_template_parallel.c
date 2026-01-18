@@ -187,11 +187,6 @@ int main(int argc, char **argv)
 
   // REDUCE ALL TIMING
 
-  // ------------------------------------------------------------
-  // REDUCE AND PRINT TIMING STATISTICS
-  // ------------------------------------------------------------
-
-
   // Local timers
   double local_comp  = t_computation;
   double local_comm = t_communication;
@@ -223,39 +218,22 @@ int main(int argc, char **argv)
 
     /* OpenMP threads */
     int n_threads = 1;
-#ifdef _OPENMP
-    n_threads = omp_get_max_threads();
-#endif
+    #ifdef _OPENMP
+        n_threads = omp_get_max_threads();
+    #endif
 
     double avg_comp = sum_comp / (double)n_ranks;
     double avg_comm = sum_comm / (double)n_ranks;
     double avg_total = sum_total / (double)n_ranks;
 
-    if (verbose > 0) {
-      /* Human-readable summary */
-      printf("\n=== RUN SUMMARY ===\n");
-      printf("Nodes: %d | Threads: %d | MPI tasks: %d | Iterations: %d | Grid X: %d | Grid Y: %d\n",
-            n_nodes, n_threads, n_ranks, Niterations, planes[!current].size[_x_], planes[!current].size[_y_]);
-      printf("Total wall-clock time (max/avg): %.6f / %.6f s\n",
-            max_total, avg_total);
-      printf("Computation time (max/avg): %.6f / %.6f s (%.2f%% / %.2f%%)\n",
-            max_comp, avg_comp,
-            100.0 * max_comp / max_total,
-            100.0 * avg_comp / avg_total);
-      printf("Communication time (max/avg): %.6f / %.6f s (%.2f%% / %.2f%%)\n",
-            max_comm, avg_comm,
-            100.0 * max_comm / max_total,
-            100.0 * avg_comm / avg_total);
-      printf("===================\n");
-    } else {
-      /* CSV: NODES,MPI_TASKS,OMP_THREADS,GRID_X,GRID_Y,MAX_TOTAL,AVG_TOTAL,MAX_COMP,AVG_COMP,MAX_COMM,AVG_COMM */
-      printf("%d,%d,%d,%d,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
-            n_nodes, n_ranks, n_threads,
-            planes[!current].size[_x_], planes[!current].size[_y_],
-            max_total, avg_total,
-            max_comp, avg_comp,
-            max_comm, avg_comm);
-    }
+    /* CSV: NODES,MPI_TASKS,OMP_THREADS,GRID_X,GRID_Y,MAX_TOTAL,AVG_TOTAL,MAX_COMP,AVG_COMP,MAX_COMM,AVG_COMM */
+    printf("%d,%d,%d,%d,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
+          n_nodes, n_ranks, n_threads,
+          planes[!current].size[_x_], planes[!current].size[_y_],
+          max_total, avg_total,
+          max_comp, avg_comp,
+          max_comm, avg_comm);
+  
 }
 
 
